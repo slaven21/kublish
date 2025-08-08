@@ -1,0 +1,32 @@
+{
+  "name": "kublish-backend",
+  "version": "1.0.0",
+  "description": "Backend API for Kublish - Salesforce Knowledge Management",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "ts-node src/index.ts",
+    "start": "node dist/index.js",
+    "build": "tsc",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "axios": "^1.11.0",
+    "dotenv": "^16.6.1",
+    "express": "^4.21.2",
+    "nodemon": "^3.0.2"
+  },
+  "keywords": [
+    "salesforce",
+    "knowledge-management",
+    "oauth",
+    "express"
+  ],
+  "author": "Kublish Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.2.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.2"
+  }
+}

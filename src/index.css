@@ -1,0 +1,244 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Editor.js Styling */
+.codex-editor {
+  @apply bg-white/80 backdrop-blur-sm rounded-lg;
+}
+
+.codex-editor__redactor {
+  @apply p-6;
+}
+
+.ce-block__content {
+  @apply max-w-none;
+}
+
+.ce-toolbar__content {
+  @apply max-w-none;
+}
+
+.ce-toolbox {
+  @apply bg-white/90 backdrop-blur-md border border-purple-200 rounded-lg shadow-lg;
+}
+
+.ce-toolbox__button {
+  @apply hover:bg-gradient-to-r hover:from-purple-50 hover:to-blue-50 transition-all duration-200;
+}
+
+.ce-toolbox__button--active {
+  @apply bg-gradient-to-r from-purple-100 to-blue-100 text-purple-700;
+}
+
+.ce-inline-toolbar {
+  @apply bg-white/90 backdrop-blur-md border border-purple-200 rounded-lg shadow-lg;
+}
+
+.ce-inline-tool {
+  @apply hover:bg-gradient-to-r hover:from-purple-50 hover:to-blue-50 transition-all duration-200;
+}
+
+.ce-inline-tool--active {
+  @apply bg-gradient-to-r from-purple-100 to-blue-100 text-purple-700;
+}
+
+.ce-conversion-toolbar {
+  @apply bg-white/90 backdrop-blur-md border border-purple-200 rounded-lg shadow-lg;
+}
+
+.ce-settings {
+  @apply bg-white/90 backdrop-blur-md border border-purple-200 rounded-lg shadow-lg;
+}
+
+.ce-settings__button {
+  @apply hover:bg-gradient-to-r hover:from-purple-50 hover:to-blue-50 transition-all duration-200;
+}
+
+.ce-popover {
+  @apply bg-white/90 backdrop-blur-md border border-purple-200 rounded-lg shadow-lg;
+}
+
+.ce-popover__item {
+  @apply hover:bg-gradient-to-r hover:from-purple-50 hover:to-blue-50 transition-all duration-200;
+}
+
+/* Block styling */
+.ce-header {
+  @apply font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent;
+}
+
+.ce-quote {
+  @apply border-l-4 border-purple-500 pl-4 italic;
+}
+
+.ce-code {
+  @apply bg-gradient-to-r from-gray-50 to-slate-50 border border-gray-200 rounded-lg p-4 font-mono text-sm;
+}
+
+.ce-delimiter {
+  @apply text-center text-gray-400;
+}
+
+.ce-table {
+  @apply border-collapse border border-gray-200 rounded-lg overflow-hidden;
+}
+
+.ce-table td {
+  @apply border border-gray-200 p-2;
+}
+
+/* Focus states */
+.ce-block--focused .ce-block__content {
+  @apply ring-2 ring-purple-500 ring-opacity-50 rounded-lg;
+}
+
+/* Placeholder styling */
+.ce-paragraph[data-placeholder]:empty::before {
+  @apply text-gray-400;
+}
+
+/* TipTap Editor Styling */
+.tiptap-editor {
+  @apply min-h-[400px];
+}
+
+.tiptap-editor .ProseMirror {
+  @apply outline-none p-6 min-h-[400px];
+}
+
+.tiptap-editor .ProseMirror p.tiptap-paragraph {
+  @apply mb-4 leading-relaxed text-gray-700;
+}
+
+.tiptap-editor .ProseMirror h1 {
+  @apply text-3xl font-bold mb-6 text-gray-900 leading-tight;
+}
+
+.tiptap-editor .ProseMirror h2 {
+  @apply text-2xl font-bold mb-5 text-gray-900 leading-tight;
+}
+
+.tiptap-editor .ProseMirror h3 {
+  @apply text-xl font-bold mb-4 text-gray-900 leading-tight;
+}
+
+.tiptap-editor .ProseMirror ul {
+  @apply list-disc mb-4 space-y-1 pl-6;
+}
+
+.tiptap-editor .ProseMirror ol {
+  @apply list-decimal mb-4 space-y-1 pl-6;
+}
+
+.tiptap-editor .ProseMirror li {
+  @apply text-gray-700 leading-relaxed mb-1;
+}
+
+.tiptap-editor .ProseMirror ul ul,
+.tiptap-editor .ProseMirror ol ol,
+.tiptap-editor .ProseMirror ul ol,
+.tiptap-editor .ProseMirror ol ul {
+  @apply mt-1 mb-1;
+}
+
+/* Ensure list markers are visible */
+.tiptap-editor .ProseMirror ul {
+  list-style-position: outside;
+  list-style-type: disc;
+}
+
+.tiptap-editor .ProseMirror ol {
+  list-style-position: outside;
+  list-style-type: decimal;
+}
+
+/* Nested list styling */
+.tiptap-editor .ProseMirror ul ul {
+  list-style-type: circle;
+}
+
+.tiptap-editor .ProseMirror ul ul ul {
+  list-style-type: square;
+}
+
+.tiptap-editor .ProseMirror a.tiptap-link {
+  @apply text-purple-600 underline hover:text-purple-800 transition-colors;
+}
+
+.tiptap-editor .ProseMirror strong {
+  @apply font-bold;
+}
+
+.tiptap-editor .ProseMirror em {
+  @apply italic;
+}
+
+.tiptap-editor .ProseMirror u {
+  @apply underline;
+}
+
+/* Focus styles */
+.tiptap-editor .ProseMirror:focus {
+  @apply outline-none;
+}
+
+/* Placeholder styling */
+.tiptap-editor .ProseMirror p.is-editor-empty:first-child::before {
+  @apply text-gray-400;
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+/* Preview mode list styling */
+.prose ul {
+  @apply list-disc mb-4 space-y-1 pl-6;
+  list-style-position: outside;
+}
+
+.prose ol {
+  @apply list-decimal mb-4 space-y-1 pl-6;
+  list-style-position: outside;
+}
+
+.prose li {
+  @apply text-gray-700 leading-relaxed mb-1;
+}
+
+.prose ul ul {
+  list-style-type: circle;
+  @apply mt-1 mb-1;
+}
+
+.prose ul ul ul {
+  list-style-type: square;
+}
+
+/* Z-index system for Kublish */
+/* Base layers: 0-9 */
+/* Navigation: 10-19 */
+/* Dropdowns: 20-29 */
+/* Overlays: 30-39 */
+/* Modals: 40-49 */
+/* Tooltips: 50-59 */
+/* Critical alerts: 60+ */
+
+/* Ensure portaled elements render above everything */
+.portal-dropdown {
+  z-index: 9999;
+}
+
+.portal-modal {
+  z-index: 9998;
+}
+
+.portal-actions-menu {
+  z-index: 10000;
+}
