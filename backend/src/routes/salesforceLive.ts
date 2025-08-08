@@ -1,35 +1,27 @@
 import express, { Request, Response } from 'express';
 import axios from 'axios';
+import {
+  getTokenData,
+  setTokenData,
+  clearTokenData,
+  TokenData
+} from '../services/tokenStore';
 
 const router = express.Router();
-
-// Mock in-memory token store (in production, use Redis or database)
-interface TokenData {
-  accessToken: string;
-  refreshToken: string;
-  instanceUrl: string;
-  timestamp: number;
-}
-
-interface TokenStore {
-  [userId: string]: TokenData;
-}
-
-const tokenStore: TokenStore = {};
 
 /**
  * Refresh access token using refresh token
  */
 const refreshAccessToken = async (userId: string): Promise<TokenData | null> => {
-  const tokenData = tokenStore[userId];
-  if (!tokenData || !tokenData.refreshToken) {
+  const tokenData = await getTokenData(userId);
+  if (!tokenData?.refreshToken) {
     console.error(`❌ No refresh token found for user: ${userId}`);
     return null;
   }
 
   try {
     console.log(`🔄 Refreshing access token for user: ${userId}`);
-    
+
     const response = await axios.post(
       'https://login.salesforce.com/services/oauth2/token',
       new URLSearchParams({
@@ -48,271 +40,131 @@ const refreshAccessToken = async (userId: string): Promise<TokenData | null> => 
     );
 
     const {
-      access_token: newAccessToken,
-      refresh_token: newRefreshToken,
-      instance_url: instanceUrl
+      access_token,
+      refresh_token,
+      instance_url,
+      issued_at,
+      expires_in
     } = response.data;
 
-    // Update token store with new tokens
-    const updatedTokenData: TokenData = {
-      accessToken: newAccessToken,
-      refreshToken: newRefreshToken || tokenData.refreshToken, // Keep old refresh token if new one not provided
-      instanceUrl: instanceUrl || tokenData.instanceUrl,
-      timestamp: Date.now()
+    const expiresAt = Date.now() + (parseInt(expires_in || '3600') * 1000); // Fallback 1h
+
+    const updatedToken: TokenData = {
+      accessToken: access_token,
+      refreshToken: refresh_token || tokenData.refreshToken,
+      instanceUrl: instance_url || tokenData.instanceUrl,
+      expiresAt
     };
 
-    tokenStore[userId] = updatedTokenData;
-    
-    console.log(`✅ Access token refreshed successfully for user: ${userId}`);
-    return updatedTokenData;
+    await setTokenData(userId, updatedToken);
+    console.log(`✅ Access token refreshed for ${userId}`);
+    return updatedToken;
 
-  } catch (error) {
-    console.error(`❌ Failed to refresh access token for user ${userId}:`, error);
-    
-    if (axios.isAxiosError(error)) {
-      const statusCode = error.response?.status;
-      const errorData = error.response?.data;
-      console.error(`Status: ${statusCode}, Error:`, errorData);
-    }
-    
+  } catch (err) {
+    console.error(`❌ Failed to refresh token for ${userId}:`, err);
     return null;
   }
 };
 
-/**
- * Make authenticated Salesforce API call with automatic token refresh
- */
 const makeSalesforceApiCall = async (
   userId: string,
   endpoint: string,
   method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'GET',
   data?: any
 ): Promise<any> => {
-  let tokenData = tokenStore[userId];
-  
-  if (!tokenData) {
-    throw new Error('No authentication data found. Please authenticate first.');
+  let tokenData = await getTokenData(userId);
+  if (!tokenData) throw new Error('User is not authenticated with Salesforce.');
+
+  const now = Date.now();
+  if (tokenData.expiresAt < now + 30000) { // refresh if < 30s left
+    tokenData = await refreshAccessToken(userId);
+    if (!tokenData) throw new Error('Unable to refresh token.');
   }
 
-  const makeRequest = async (accessToken: string, instanceUrl: string) => {
-    const url = `${instanceUrl}${endpoint}`;
-    
-    console.log(`🌐 Making Salesforce API call: ${method} ${url}`);
-    
-    return await axios({
-      method,
-      url,
-      data,
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-      timeout: 15000
-    });
-  };
+  const url = `${tokenData.instanceUrl}${endpoint}`;
 
-  try {
-    // First attempt with current access token
-    return await makeRequest(tokenData.accessToken, tokenData.instanceUrl);
-    
-  } catch (error) {
-    if (axios.isAxiosError(error) && error.response?.status === 401) {
-      console.log(`🔑 Access token expired, attempting refresh for user: ${userId}`);
-      
-      // Token expired, try to refresh
-      const refreshedTokenData = await refreshAccessToken(userId);
-      
-      if (!refreshedTokenData) {
-        throw new Error('Failed to refresh access token. Please re-authenticate.');
-      }
-      
-      // Retry with new access token
-      try {
-        return await makeRequest(refreshedTokenData.accessToken, refreshedTokenData.instanceUrl);
-      } catch (retryError) {
-        console.error(`❌ API call failed even after token refresh:`, retryError);
-        throw retryError;
-      }
-    } else {
-      // Non-401 error, throw as-is
-      throw error;
-    }
-  }
+  return axios({
+    method,
+    url,
+    data,
+    headers: {
+      Authorization: `Bearer ${tokenData.accessToken}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json'
+    },
+    timeout: 15000
+  });
 };
 
 /**
  * GET /salesforce/me
- * Get current user information from Salesforce
  */
 router.get('/me', async (req: Request, res: Response) => {
+  const userId = req.query.userId as string;
+  if (!userId) return res.status(400).json({ error: 'Missing userId' });
+
   try {
-    const userId = req.query.userId as string || 'default-user';
-    
-    console.log(`👤 Fetching user info for: ${userId}`);
-    
-    // Try userinfo endpoint first (simpler and doesn't require user ID)
-    let userResponse;
-    
-    try {
-      userResponse = await makeSalesforceApiCall(
-        userId,
-        '/services/oauth2/userinfo'
-      );
-    } catch (userinfoError) {
-      console.log(`ℹ️ Userinfo endpoint failed, trying User sobject...`);
-      
-      // Fallback to User sobject (requires knowing the user ID)
-      // First get the user ID from the token validation
-      try {
-        const tokenValidation = await makeSalesforceApiCall(
-          userId,
-          '/services/oauth2/userinfo'
-        );
-        
-        const salesforceUserId = tokenValidation.data.user_id;
-        
-        userResponse = await makeSalesforceApiCall(
-          userId,
-          `/services/data/v58.0/sobjects/User/${salesforceUserId}`
-        );
-      } catch (fallbackError) {
-        throw userinfoError; // Throw original error if fallback also fails
-      }
-    }
-    
-    const userData = userResponse.data;
-    
-    console.log(`✅ Successfully retrieved user info for: ${userData.name || userData.display_name}`);
-    
-    // Return standardized user data
+    const userResp = await makeSalesforceApiCall(userId, '/services/oauth2/userinfo');
+    const userData = userResp.data;
+
     res.status(200).json({
       success: true,
       user: {
-        id: userData.user_id || userData.Id,
-        name: userData.name || userData.display_name || `${userData.first_name} ${userData.last_name}`,
-        email: userData.email || userData.Email,
-        username: userData.preferred_username || userData.Username,
-        organization: userData.organization_id || userData.CompanyName,
-        profile: userData.profile || userData.Profile?.Name,
-        isActive: userData.is_active !== false && userData.IsActive !== false,
-        lastLoginDate: userData.last_modified_date || userData.LastLoginDate,
-        timezone: userData.timezone || userData.TimeZoneSidKey,
-        locale: userData.locale || userData.LocaleSidKey,
-        language: userData.language || userData.LanguageLocaleKey
+        id: userData.user_id,
+        name: userData.name || `${userData.first_name} ${userData.last_name}`,
+        email: userData.email,
+        username: userData.preferred_username,
+        organization: userData.organization_id,
+        isActive: userData.is_active !== false,
+        lastLoginDate: userData.last_modified_date,
+        timezone: userData.timezone,
+        locale: userData.locale,
+        language: userData.language
       },
-      instanceUrl: tokenStore[userId]?.instanceUrl,
+      instanceUrl: (await getTokenData(userId))?.instanceUrl,
       retrievedAt: new Date().toISOString()
     });
-    
+
   } catch (error) {
-    console.error('❌ Error fetching Salesforce user info:', error);
-    
-    if (axios.isAxiosError(error)) {
-      const statusCode = error.response?.status || 500;
-      const errorData = error.response?.data;
-      
-      return res.status(statusCode).json({
-        success: false,
-        error: 'Failed to fetch user information',
-        message: errorData?.error_description || error.message,
-        details: errorData
-      });
-    }
-    
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error',
-      message: error instanceof Error ? error.message : 'Unknown error'
-    });
+    console.error('❌ /me error:', error);
+    res.status(500).json({ error: 'Failed to fetch user info' });
   }
 });
 
 /**
  * GET /salesforce/org
- * Get organization information from Salesforce
  */
 router.get('/org', async (req: Request, res: Response) => {
+  const userId = req.query.userId as string;
+  if (!userId) return res.status(400).json({ error: 'Missing userId' });
+
   try {
-    const userId = req.query.userId as string || 'default-user';
-    
-    console.log(`🏢 Fetching organization info for user: ${userId}`);
-    
-    const orgResponse = await makeSalesforceApiCall(
+    const orgResp = await makeSalesforceApiCall(
       userId,
       '/services/data/v58.0/query/?q=SELECT+Id,Name,OrganizationType,IsSandbox,InstanceName,NamespacePrefix+FROM+Organization+LIMIT+1'
     );
-    
-    const orgData = orgResponse.data.records[0];
-    
-    if (!orgData) {
-      return res.status(404).json({
-        success: false,
-        error: 'Organization not found',
-        message: 'Could not retrieve organization information'
-      });
-    }
-    
-    console.log(`✅ Successfully retrieved org info: ${orgData.Name}`);
-    
+
+    const org = orgResp.data.records?.[0];
+    if (!org) return res.status(404).json({ error: 'Organization not found' });
+
     res.status(200).json({
       success: true,
       organization: {
-        id: orgData.Id,
-        name: orgData.Name,
-        type: orgData.OrganizationType,
-        isSandbox: orgData.IsSandbox,
-        instanceName: orgData.InstanceName,
-        namespacePrefix: orgData.NamespacePrefix
+        id: org.Id,
+        name: org.Name,
+        type: org.OrganizationType,
+        isSandbox: org.IsSandbox,
+        instanceName: org.InstanceName,
+        namespacePrefix: org.NamespacePrefix
       },
-      instanceUrl: tokenStore[userId]?.instanceUrl,
+      instanceUrl: (await getTokenData(userId))?.instanceUrl,
       retrievedAt: new Date().toISOString()
     });
-    
+
   } catch (error) {
-    console.error('❌ Error fetching Salesforce org info:', error);
-    
-    if (axios.isAxiosError(error)) {
-      const statusCode = error.response?.status || 500;
-      const errorData = error.response?.data;
-      
-      return res.status(statusCode).json({
-        success: false,
-        error: 'Failed to fetch organization information',
-        message: errorData?.error_description || error.message,
-        details: errorData
-      });
-    }
-    
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error',
-      message: error instanceof Error ? error.message : 'Unknown error'
-    });
+    console.error('❌ /org error:', error);
+    res.status(500).json({ error: 'Failed to fetch org info' });
   }
 });
-
-/**
- * Helper function to set token data (for integration with existing OAuth flow)
- */
-export const setTokenData = (userId: string, tokenData: TokenData): void => {
-  tokenStore[userId] = tokenData;
-  console.log(`💾 Token data stored for user: ${userId}`);
-};
-
-/**
- * Helper function to get token data
- */
-export const getTokenData = (userId: string): TokenData | null => {
-  return tokenStore[userId] || null;
-};
-
-/**
- * Helper function to clear token data
- */
-export const clearTokenData = (userId: string): void => {
-  delete tokenStore[userId];
-  console.log(`🗑️ Token data cleared for user: ${userId}`);
-};
 
 export default router;
